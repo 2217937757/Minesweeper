@@ -36,6 +36,7 @@ class MinesweeperGame:
         self.elapsed_time = 0
         self.timer_id = None
         self.flags_placed = 0
+        self.animation_playing = False  # 动画播放标志
         
         # 创建界面
         self.create_menu()
@@ -309,6 +310,10 @@ class MinesweeperGame:
             self.mine_counter.config(text=str(remaining).zfill(3))
     
     def init_game(self):
+        # 如果动画正在播放，禁止重置
+        if self.animation_playing:
+            return
+        
         # 初始化游戏板
         self.board = [[0 for _ in range(self.cols)] for _ in range(self.rows)]
         self.revealed = [[False for _ in range(self.cols)] for _ in range(self.rows)]
@@ -424,6 +429,8 @@ class MinesweeperGame:
             self.game_over = True
             self.stop_timer()
             self.face_button.config(text="😎")
+            # 清除动画播放标志（如果有）
+            self.animation_playing = False
             messagebox.showinfo("恭喜", f"你赢了！用时: {self.elapsed_time}秒", parent=self.root)
     
     def chord_click(self, row, col):
@@ -469,6 +476,8 @@ class MinesweeperGame:
                 self.game_over = True
                 self.stop_timer()
                 self.face_button.config(text="😎")
+                # 清除动画播放标志（如果有）
+                self.animation_playing = False
                 messagebox.showinfo("恭喜", f"你赢了！用时: {self.elapsed_time}秒", parent=self.root)
     
     def right_click(self, row, col):
@@ -632,6 +641,9 @@ class MinesweeperGame:
     
     def animate_explosion(self, click_row, click_col):
         """炸弹爆炸动画 - 从点击位置向外扩散"""
+        # 设置动画播放标志
+        self.animation_playing = True
+        
         # 收集所有需要显示的地雷
         all_mines = []
         for i in range(self.rows):
@@ -701,6 +713,8 @@ class MinesweeperGame:
                                 relief=tk.FLAT,
                                 bd=1
                             )
+                # 清除动画播放标志
+                self.animation_playing = False
                 # 动画结束后显示消息框
                 messagebox.showerror("游戏结束", "你踩到雷了！", parent=self.root)
         
@@ -760,6 +774,10 @@ class MinesweeperGame:
     
     def restart_game(self):
         """重新开始游戏"""
+        # 如果动画正在播放，禁止重置
+        if self.animation_playing:
+            return
+        
         # 停止计时器
         self.stop_timer()
         

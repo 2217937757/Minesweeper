@@ -1,0 +1,9 @@
+# Minesweeper Game Dependencies
+# This project uses only Python standard library modules:
+# - tkinter (GUI framework)
+# - random (random number generation)
+# - time (timer functionality)
+# - messagebox, simpledialog (dialog boxes)
+#
+# No external dependencies required!
+# Python 3.8+ is recommended.

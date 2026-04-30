@@ -4,7 +4,7 @@ import random
 import time
 
 
-class Minesweeper:
+class MinesweeperGame:
     def __init__(self, root):
         self.root = root
         self.root.title("扫雷")
@@ -788,13 +788,18 @@ class Minesweeper:
                 self.elapsed_time = 999
             self.timer_display.config(text=str(self.elapsed_time).zfill(3))
             self.timer_id = self.root.after(1000, self.update_timer)
+    
+    def run(self):
+        """启动游戏主循环"""
+        self.root.mainloop()
 
 
 def main():
+    """程序入口点"""
     root = tk.Tk()
     root.resizable(True, True)  # 允许窗口调整大小和最大化
     
-    game = Minesweeper(root)
+    game = MinesweeperGame(root)
     
     # 居中显示窗口
     root.update_idletasks()

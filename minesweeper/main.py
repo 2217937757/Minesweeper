@@ -338,16 +338,18 @@ class MinesweeperGame:
         if event.widget != self.root:
             return
         
-        # 延迟更新，避免频繁刷新
+        # 延迟更新，避免频繁刷新（增加到200ms）
         if hasattr(self, '_resize_timer'):
             self.root.after_cancel(self._resize_timer)
         
-        self._resize_timer = self.root.after(100, self._do_resize_update)
+        self._resize_timer = self.root.after(200, self._do_resize_update)
     
     def _do_resize_update(self):
         """执行字体大小更新"""
         new_font_size = self.calculate_font_size()
-        self.update_all_fonts(new_font_size)
+        # 只有当字体大小真正改变时才更新
+        if new_font_size != self.current_font_size:
+            self.update_all_fonts(new_font_size)
     
     def on_button_press(self, row, col):
         """按钮按下事件 - 改变笑脸表情"""

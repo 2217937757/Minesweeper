@@ -37,6 +37,7 @@ class MinesweeperGame:
         self.timer_id = None
         self.flags_placed = 0
         self.animation_playing = False  # 动画播放标志
+        self.current_font_size = 12  # 当前字体大小
         
         # 创建界面
         self.create_menu()
@@ -248,28 +249,28 @@ class MinesweeperGame:
         
         self.game_frame = tk.Frame(self.outer_frame, bg="#c0c0c0", bd=2, relief=tk.SUNKEN)
         
-        # 创建按钮网格 - 使用固定大小的正方形格子
+        # 创建按钮网格 - 使用自适应大小的正方形格子
         self.buttons = []
         for i in range(self.rows):
             row = []
             for j in range(self.cols):
                 btn = tk.Button(
                     self.game_frame,
-                    width=2,  # 固定宽度
-                    height=1,  # 固定高度
-                    font=("Arial", 9, "bold"),
+                    width=2,  # 宽度（字符数）
+                    height=1,  # 高度（字符行数）
+                    font=("Arial", self.current_font_size, "bold"),  # 使用动态字体大小
                     relief=tk.RAISED,  # 立体凸起效果
-                    bd=2,  # 边框宽度2，增强立体感
+                    bd=3,  # 边框宽度3，增强立体感
                     bg="#c0c0c0",
                     fg="#000000",
                     activebackground="#c0c0c0",
                     disabledforeground="#000000",  # 关键：设置禁用时的文字颜色为黑色
                     overrelief=tk.RAISED,
-                    padx=0,
-                    pady=0,
+                    padx=5,  # 水平内边距
+                    pady=5,  # 垂直内边距
                     highlightthickness=0  # 禁用系统主题的高亮边框
                 )
-                btn.grid(row=i, column=j, padx=1, pady=1)  # 添加间距形成网格线
+                btn.grid(row=i, column=j, sticky="nsew")  # 填满格子
                 # 绑定鼠标事件
                 btn.bind("<ButtonPress-1>", lambda e, r=i, c=j: self.on_button_press(r, c))
                 btn.bind("<ButtonRelease-1>", lambda e, r=i, c=j: self.left_release(r, c))
@@ -282,7 +283,71 @@ class MinesweeperGame:
                 row.append(btn)
             self.buttons.append(row)
         
-        self.game_frame.pack()
+        # 配置grid使所有行列均匀分布，形成正方形
+        for i in range(self.rows):
+            self.game_frame.grid_rowconfigure(i, weight=1, uniform="square")
+        for j in range(self.cols):
+            self.game_frame.grid_columnconfigure(j, weight=1, uniform="square")
+        
+        self.game_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # 绑定窗口大小变化事件
+        self.root.bind('<Configure>', self.on_window_resize)
+    
+    def calculate_font_size(self):
+        """根据窗口大小计算合适的字体大小"""
+        try:
+            # 获取游戏区域的实际大小
+            game_width = self.game_frame.winfo_width()
+            game_height = self.game_frame.winfo_height()
+            
+            if game_width <= 1 or game_height <= 1:
+                return self.current_font_size  # 如果还没初始化，返回当前值
+            
+            # 计算每个格子的像素大小
+            cell_width = game_width / self.cols
+            cell_height = game_height / self.rows
+            cell_size = min(cell_width, cell_height)  # 取较小值确保正方形
+            
+            # 根据格子大小计算字体大小（格子大小的约40%作为字体大小）
+            new_font_size = max(8, min(24, int(cell_size * 0.4)))
+            
+            return new_font_size
+        except:
+            return self.current_font_size
+    
+    def update_all_fonts(self, font_size):
+        """更新所有按钮的字体大小"""
+        if font_size == self.current_font_size:
+            return  # 如果字体大小没变，不需要更新
+        
+        self.current_font_size = font_size
+        font = ("Arial", font_size, "bold")
+        
+        for i in range(self.rows):
+            for j in range(self.cols):
+                btn = self.buttons[i][j]
+                current_config = btn.config()
+                
+                # 只更新字体，保持其他属性不变
+                btn.config(font=font)
+    
+    def on_window_resize(self, event):
+        """窗口大小变化时调整字体大小"""
+        # 只处理根窗口的resize事件
+        if event.widget != self.root:
+            return
+        
+        # 延迟更新，避免频繁刷新
+        if hasattr(self, '_resize_timer'):
+            self.root.after_cancel(self._resize_timer)
+        
+        self._resize_timer = self.root.after(100, self._do_resize_update)
+    
+    def _do_resize_update(self):
+        """执行字体大小更新"""
+        new_font_size = self.calculate_font_size()
+        self.update_all_fonts(new_font_size)
     
     def on_button_press(self, row, col):
         """按钮按下事件 - 改变笑脸表情"""
@@ -517,9 +582,9 @@ class MinesweeperGame:
                 text="⚑",
                 bg="#e74c3c",  # 鲜艳的红色背景
                 fg="#ffffff",  # 纯白色旗帜
-                font=("Arial", 9, "bold"),
+                font=("Arial", 12, "bold"),  # 增大字体匹配格子大小
                 relief=tk.RAISED,  # 保持凸起效果，表示未揭示
-                bd=2,  # 边框宽度2，有明显边框
+                bd=3,  # 边框宽度3，与未揭示格子一致
                 disabledforeground="#ffffff"  # 禁用时保持白色
             )
         
@@ -617,8 +682,8 @@ class MinesweeperGame:
                         fg=color,
                         bg="#e8e8e8",
                         relief=tk.SUNKEN,
-                        font=("Arial", 9, "bold"),
-                        bd=2,
+                        font=("Arial", 12, "bold"),  # 增大字体匹配格子大小
+                        bd=2,  # 已揭示格子边框宽度2
                         state=tk.NORMAL,
                         overrelief=tk.SUNKEN,
                         highlightthickness=0
@@ -632,8 +697,8 @@ class MinesweeperGame:
                         fg=color,
                         bg="#e8e8e8",
                         relief=tk.SUNKEN,
-                        font=("Arial", 9, "bold"),
-                        bd=2,
+                        font=("Arial", 12, "bold"),  # 增大字体匹配格子大小
+                        bd=2,  # 已揭示格子边框宽度2
                         state=tk.NORMAL,
                         overrelief=tk.SUNKEN,
                         highlightthickness=0
@@ -679,7 +744,7 @@ class MinesweeperGame:
                             text='✓',
                             bg='#27ae60',
                             fg='#ffffff',
-                            font=("Arial", 9, "bold"),
+                            font=("Arial", 12, "bold"),  # 增大字体匹配格子大小
                             relief=tk.FLAT,
                             bd=1
                         )
@@ -689,7 +754,7 @@ class MinesweeperGame:
                             text='💥',
                             bg='#c0392b',
                             fg='#ffffff',
-                            font=("Arial", 9, "bold"),
+                            font=("Arial", 12, "bold"),  # 增大字体匹配格子大小
                             relief=tk.FLAT,
                             bd=1
                         )
@@ -709,7 +774,7 @@ class MinesweeperGame:
                                 text='✗',
                                 bg='#e67e22',
                                 fg='#ffffff',
-                                font=("Arial", 9, "bold"),
+                                font=("Arial", 12, "bold"),  # 增大字体匹配格子大小
                                 relief=tk.FLAT,
                                 bd=1
                             )

@@ -35,6 +35,7 @@ class MinesweeperGame:
         self.timer_running = False
         self.elapsed_time = 0
         self.timer_id = None
+        self.timer_paused = False
         self.flags_placed = 0
         self.animation_playing = False  # 动画播放标志
         self.current_font_size = 12  # 当前字体大小
@@ -43,6 +44,9 @@ class MinesweeperGame:
         self.create_menu()
         self.create_widgets()
         self.init_game()
+
+        self.root.bind("<Deactivate>", self.on_window_deactivate, add="+")
+        self.root.bind("<Activate>", self.on_window_activate, add="+")
     
     def create_menu(self):
         """创建菜单栏"""
@@ -390,6 +394,7 @@ class MinesweeperGame:
         self.start_time = None
         self.timer_running = False
         self.elapsed_time = 0
+        self.timer_paused = False
         self.flags_placed = 0
         if self.timer_id:
             self.root.after_cancel(self.timer_id)
@@ -853,6 +858,8 @@ class MinesweeperGame:
     
     def start_timer(self):
         """启动计时器"""
+        if self.timer_paused:
+            return
         self.start_time = time.time()
         self.timer_running = True
         self.update_timer()
@@ -860,9 +867,33 @@ class MinesweeperGame:
     def stop_timer(self):
         """停止计时器"""
         self.timer_running = False
+        self.timer_paused = False
         if self.timer_id:
             self.root.after_cancel(self.timer_id)
             self.timer_id = None
+    
+    def pause_timer(self):
+        if not self.timer_running:
+            return
+        self.timer_running = False
+        self.timer_paused = True
+        if self.timer_id:
+            self.root.after_cancel(self.timer_id)
+            self.timer_id = None
+    
+    def resume_timer(self):
+        if not self.timer_paused:
+            return
+        if self.game_over:
+            self.timer_paused = False
+            return
+        if self.start_time is None:
+            self.timer_paused = False
+            return
+        self.start_time = time.time() - self.elapsed_time
+        self.timer_running = True
+        self.timer_paused = False
+        self.update_timer()
     
     def update_timer(self):
         """更新计时器显示"""
@@ -873,6 +904,16 @@ class MinesweeperGame:
                 self.elapsed_time = 999
             self.timer_display.config(text=str(self.elapsed_time).zfill(3))
             self.timer_id = self.root.after(1000, self.update_timer)
+
+    def on_window_deactivate(self, event=None):
+        if self.start_time is None:
+            return
+        if self.game_over:
+            return
+        self.pause_timer()
+    
+    def on_window_activate(self, event=None):
+        self.resume_timer()
     
     def run(self):
         """启动游戏主循环"""

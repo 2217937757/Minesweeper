@@ -2,6 +2,19 @@ import tkinter as tk
 from tkinter import messagebox, simpledialog
 import random
 import time
+from collections import deque
+
+
+NUMBER_COLORS = {
+    1: "#0000ff",
+    2: "#008000",
+    3: "#ff0000",
+    4: "#000080",
+    5: "#800000",
+    6: "#008080",
+    7: "#000000",
+    8: "#808080",
+}
 
 
 class MinesweeperGame:
@@ -39,6 +52,7 @@ class MinesweeperGame:
         self.flags_placed = 0
         self.animation_playing = False  # 动画播放标志
         self.current_font_size = 12  # 当前字体大小
+        self._hover_fix_id = None
         
         # 创建界面
         self.create_menu()
@@ -47,6 +61,10 @@ class MinesweeperGame:
 
         self.root.bind("<Deactivate>", self.on_window_deactivate, add="+")
         self.root.bind("<Activate>", self.on_window_activate, add="+")
+        self.root.bind("<Unmap>", self.on_window_unmap, add="+")
+        self.root.bind("<Map>", self.on_window_map, add="+")
+        self.root.bind_all("<FocusOut>", self.on_any_focus_out, add="+")
+        self.root.bind_all("<FocusIn>", self.on_any_focus_in, add="+")
     
     def create_menu(self):
         """创建菜单栏"""
@@ -91,7 +109,7 @@ class MinesweeperGame:
         # 居中显示
         dialog.update_idletasks()
         width = 300
-        height = 200
+        height = 230
         x = (dialog.winfo_screenwidth() // 2) - (width // 2)
         y = (dialog.winfo_screenheight() // 2) - (height // 2)
         dialog.geometry(f'{width}x{height}+{x}+{y}')
@@ -114,6 +132,10 @@ class MinesweeperGame:
         mines_var = tk.StringVar(value=str(self.mines))
         mines_entry = tk.Entry(frame, textvariable=mines_var, font=("Arial", 10), width=10)
         mines_entry.grid(row=2, column=1, pady=5)
+
+        tk.Label(frame, text="雷密度:", font=("Arial", 10)).grid(row=3, column=0, sticky=tk.W, pady=5)
+        density_var = tk.StringVar(value="—")
+        tk.Label(frame, textvariable=density_var, font=("Arial", 10)).grid(row=3, column=1, sticky=tk.W, pady=5)
         
         def clamp_value(var, min_val, max_val):
             """自动调整数值到有效范围内并更新显示"""
@@ -126,6 +148,25 @@ class MinesweeperGame:
             except ValueError:
                 # 如果输入的不是数字，恢复为最小值
                 var.set(str(min_val))
+
+        def update_density(*args):
+            try:
+                rows = int(rows_var.get())
+                cols = int(cols_var.get())
+                mines = int(mines_var.get())
+                total = rows * cols
+                if total <= 0:
+                    density_var.set("—")
+                    return
+                max_mines = total - 1
+                if mines > max_mines:
+                    mines = max_mines
+                if mines < 0:
+                    mines = 0
+                density = (mines / total) * 100
+                density_var.set(f"{density:.2f}%（{mines}/{total}）")
+            except ValueError:
+                density_var.set("—")
         
         def update_mines_limit(*args):
             """当行数或列数改变时，自动调整雷数上限"""
@@ -154,6 +195,7 @@ class MinesweeperGame:
                     pass
             except ValueError:
                 pass
+            update_density()
         
         # 绑定失焦事件，自动调整数值
         rows_entry.bind('<FocusOut>', lambda e: clamp_value(rows_var, 9, 30))
@@ -163,7 +205,12 @@ class MinesweeperGame:
         # 监听行数和列数的变化，动态调整雷数上限
         rows_trace_id = rows_var.trace_add('write', update_mines_limit)
         cols_trace_id = cols_var.trace_add('write', update_mines_limit)
+        density_rows_trace_id = rows_var.trace_add('write', update_density)
+        density_cols_trace_id = cols_var.trace_add('write', update_density)
+        density_mines_trace_id = mines_var.trace_add('write', update_density)
         mines_trace_id = None
+
+        update_density()
         
         def apply_custom():
             try:
@@ -194,7 +241,7 @@ class MinesweeperGame:
         
         # 按钮
         btn_frame = tk.Frame(frame)
-        btn_frame.grid(row=3, column=0, columnspan=2, pady=20)
+        btn_frame.grid(row=4, column=0, columnspan=2, pady=20)
         
         tk.Button(btn_frame, text="确定", command=apply_custom, font=("Arial", 10), width=8).pack(side=tk.LEFT, padx=5)
         tk.Button(btn_frame, text="取消", command=dialog.destroy, font=("Arial", 10), width=8).pack(side=tk.LEFT, padx=5)
@@ -255,6 +302,7 @@ class MinesweeperGame:
         
         # 创建按钮网格 - 使用自适应大小的正方形格子
         self.buttons = []
+        self.button_positions = {}
         for i in range(self.rows):
             row = []
             for j in range(self.cols):
@@ -284,6 +332,7 @@ class MinesweeperGame:
                 btn.bind("<Leave>", lambda e: self.on_leave_button())
                 # 禁用右键菜单
                 btn.bind("<Button-3>", lambda e: "break", add="+")
+                self.button_positions[btn] = (i, j)
                 row.append(btn)
             self.buttons.append(row)
         
@@ -370,6 +419,62 @@ class MinesweeperGame:
         """鼠标离开按钮 - 恢复笑脸"""
         if not self.game_over:
             self.face_button.config(text="😊")
+
+    def schedule_hover_relief_fix(self):
+        if getattr(self, "_hover_fix_id", None):
+            try:
+                self.root.after_cancel(self._hover_fix_id)
+            except tk.TclError:
+                pass
+            self._hover_fix_id = None
+
+        self._hover_fix_id = self.root.after(1, self.apply_hover_relief_fix)
+
+    def apply_hover_relief_fix(self):
+        self._hover_fix_id = None
+        widget = None
+        try:
+            widget = self.root.winfo_containing(
+                self.root.winfo_pointerx(),
+                self.root.winfo_pointery(),
+            )
+        except tk.TclError:
+            return
+
+        positions = getattr(self, "button_positions", {})
+        pos = None
+
+        if widget is not None:
+            current = widget
+            while current is not None:
+                pos = positions.get(current)
+                if pos is not None:
+                    widget = current
+                    break
+                current = getattr(current, "master", None)
+
+        if pos is None:
+            origin = getattr(self, "_last_reveal_origin", None)
+            if origin is None:
+                return
+            r, c = origin
+            if not (0 <= r < self.rows and 0 <= c < self.cols and self.revealed[r][c]):
+                return
+            widget = self.buttons[r][c]
+        else:
+            r, c = pos
+            if not (0 <= r < self.rows and 0 <= c < self.cols and self.revealed[r][c]):
+                return
+
+        widget.config(relief=tk.SUNKEN, overrelief=tk.SUNKEN)
+        try:
+            widget.config(overrelief=tk.RAISED)
+            widget.config(overrelief=tk.SUNKEN)
+        except tk.TclError:
+            pass
+
+        widget.event_generate("<Leave>")
+        widget.event_generate("<Enter>")
     
     def update_mine_counter(self):
         """更新地雷计数器"""
@@ -526,7 +631,7 @@ class MinesweeperGame:
         # 如果标记数等于数字，揭开所有未标记的格子
         if flagged_count == self.board[row][col]:
             for i, j in unrevealed_cells:
-                self.reveal_cell(i, j)
+                self.reveal_cell(i, j, batch_mode=True)
                 # 检查是否踩到雷
                 if self.board[i][j] == -1:
                     self.game_over = True
@@ -538,10 +643,7 @@ class MinesweeperGame:
             
             # 批量揭示完成后，统一刷新界面
             self.root.update_idletasks()
-            # 对所有已揭示的格子触发一次Enter事件，确保relief正确
-            for i, j in unrevealed_cells:
-                if self.revealed[i][j]:
-                    self.buttons[i][j].event_generate("<Enter>")
+            self.schedule_hover_relief_fix()
             
             # 检查是否胜利
             if self.check_win():
@@ -613,103 +715,96 @@ class MinesweeperGame:
             col: 列号
             batch_mode: 批量模式，跳过刷新以提高性能
         """
-        if (row < 0 or row >= self.rows or 
-            col < 0 or col >= self.cols or 
-            self.revealed[row][col] or 
-            self.flagged[row][col]):
+        if (
+            row < 0
+            or row >= self.rows
+            or col < 0
+            or col >= self.cols
+            or self.revealed[row][col]
+            or self.flagged[row][col]
+        ):
             return
         
         # 使用队列进行广度优先搜索，避免递归过深
-        queue = [(row, col)]
-        visited = set()
+        self._last_reveal_origin = (row, col)
+        rows = self.rows
+        cols = self.cols
+        board = self.board
+        buttons = self.buttons
+        revealed = self.revealed
+        flagged = self.flagged
+
+        queue = deque([row * cols + col])
+        visited = [bytearray(cols) for _ in range(rows)]
+        enqueued = [bytearray(cols) for _ in range(rows)]
+        enqueued[row][col] = 1
+        changed = False
         
         while queue:
-            r, c = queue.pop(0)
+            idx = queue.popleft()
+            r = idx // cols
+            c = idx - r * cols
             
             # 边界检查和状态检查
-            if (r < 0 or r >= self.rows or 
-                c < 0 or c >= self.cols or 
-                self.revealed[r][c] or 
-                self.flagged[r][c] or
-                (r, c) in visited):
+            if (
+                r < 0
+                or r >= rows
+                or c < 0
+                or c >= cols
+                or revealed[r][c]
+                or flagged[r][c]
+                or visited[r][c]
+            ):
                 continue
             
-            visited.add((r, c))
-            self.revealed[r][c] = True
-            cell_value = self.board[r][c]
-            
-            # 根据数字设置不同颜色（经典扫雷配色）
-            colors = {
-                1: "#0000ff",  # 蓝色
-                2: "#008000",  # 绿色
-                3: "#ff0000",  # 红色
-                4: "#000080",  # 深蓝色
-                5: "#800000",  # 深红色
-                6: "#008080",  # 青色
-                7: "#000000",  # 黑色
-                8: "#808080"   # 灰色
-            }
+            visited[r][c] = 1
+            revealed[r][c] = True
+            cell_value = board[r][c]
             
             if cell_value == 0:
                 # 空白格 - 批量模式下跳过刷新
-                if not batch_mode:
-                    self.buttons[r][c].config(
-                        text="", 
-                        bg="#e8e8e8",
-                        relief=tk.SUNKEN,
-                        bd=2,
-                        state=tk.NORMAL,
-                        overrelief=tk.SUNKEN,
-                        highlightthickness=0
-                    )
-                    self.root.update_idletasks()
-                    self.buttons[r][c].event_generate("<Enter>")
-                else:
-                    # 批量模式：只设置必要的属性，不刷新
-                    self.buttons[r][c].config(
-                        text="", 
-                        bg="#e8e8e8",
-                        relief=tk.SUNKEN,
-                        bd=2,
-                        state=tk.NORMAL,
-                        overrelief=tk.SUNKEN,
-                        highlightthickness=0
-                    )
+                buttons[r][c].config(
+                    text="",
+                    bg="#e8e8e8",
+                    relief=tk.SUNKEN,
+                    bd=2,
+                    state=tk.NORMAL,
+                    overrelief=tk.SUNKEN,
+                    highlightthickness=0,
+                )
+                changed = True
                 # 如果是空白格，将周围的格子加入队列
-                for i in range(max(0, r - 1), min(self.rows, r + 2)):
-                    for j in range(max(0, c - 1), min(self.cols, c + 2)):
-                        if (i, j) not in visited and not self.revealed[i][j]:
-                            queue.append((i, j))
+                r0 = r - 1 if r > 0 else 0
+                r1 = r + 1 if r + 1 < rows else rows - 1
+                c0 = c - 1 if c > 0 else 0
+                c1 = c + 1 if c + 1 < cols else cols - 1
+                for i in range(r0, r1 + 1):
+                    row_enqueued = enqueued[i]
+                    row_visited = visited[i]
+                    for j in range(c0, c1 + 1):
+                        if row_visited[j] or row_enqueued[j] or revealed[i][j] or flagged[i][j]:
+                            continue
+                        row_enqueued[j] = 1
+                        queue.append(i * cols + j)
             else:
                 # 数字格 - 批量模式下跳过刷新
-                color = colors.get(cell_value, "#000000")
-                if not batch_mode:
-                    self.buttons[r][c].config(
-                        text=str(cell_value),
-                        fg=color,
-                        bg="#e8e8e8",
-                        relief=tk.SUNKEN,
-                        font=("Arial", 12, "bold"),  # 增大字体匹配格子大小
-                        bd=2,  # 已揭示格子边框宽度2
-                        state=tk.NORMAL,
-                        overrelief=tk.SUNKEN,
-                        highlightthickness=0
-                    )
-                    self.root.update_idletasks()
-                    self.buttons[r][c].event_generate("<Enter>")
-                else:
-                    # 批量模式：只设置必要的属性，不刷新
-                    self.buttons[r][c].config(
-                        text=str(cell_value),
-                        fg=color,
-                        bg="#e8e8e8",
-                        relief=tk.SUNKEN,
-                        font=("Arial", 12, "bold"),  # 增大字体匹配格子大小
-                        bd=2,  # 已揭示格子边框宽度2
-                        state=tk.NORMAL,
-                        overrelief=tk.SUNKEN,
-                        highlightthickness=0
-                    )
+                color = NUMBER_COLORS.get(cell_value, "#000000")
+                buttons[r][c].config(
+                    text=str(cell_value),
+                    fg=color,
+                    bg="#e8e8e8",
+                    relief=tk.SUNKEN,
+                    font=("Arial", 12, "bold"),
+                    bd=2,
+                    state=tk.NORMAL,
+                    overrelief=tk.SUNKEN,
+                    highlightthickness=0,
+                )
+                changed = True
+
+        if not batch_mode and changed:
+            self.root.update_idletasks()
+            self.schedule_hover_relief_fix()
     
     def animate_explosion(self, click_row, click_col):
         """炸弹爆炸动画 - 从点击位置向外扩散"""
@@ -717,21 +812,17 @@ class MinesweeperGame:
         self.animation_playing = True
         
         # 收集所有需要显示的地雷
-        all_mines = []
+        mines_by_distance = {}
         for i in range(self.rows):
             for j in range(self.cols):
                 if self.board[i][j] == -1:
                     distance = abs(i - click_row) + abs(j - click_col)
-                    all_mines.append((i, j, distance))
-        
-        # 按距离排序，近的先爆炸
-        all_mines.sort(key=lambda x: x[2])
-        
+                    mines_by_distance.setdefault(distance, []).append((i, j))
         # 分批显示爆炸效果
-        max_distance = all_mines[-1][2] if all_mines else 0
+        max_distance = max(mines_by_distance.keys(), default=0)
         
         # 根据地雷数量动态调整延迟时间
-        total_mines = len(all_mines)
+        total_mines = sum(len(v) for v in mines_by_distance.values())
         if total_mines > 200:
             delay_per_step = 10  # 大量地雷时快速播放
         elif total_mines > 100:
@@ -743,28 +834,27 @@ class MinesweeperGame:
         
         def explode_step(current_distance):
             # 显示当前距离的所有地雷
-            for i, j, dist in all_mines:
-                if dist == current_distance:
-                    if self.flagged[i][j]:
-                        # 正确标记的地雷 - 绿色对勾
-                        self.buttons[i][j].config(
-                            text='✓',
-                            bg='#27ae60',
-                            fg='#ffffff',
-                            font=("Arial", 12, "bold"),  # 增大字体匹配格子大小
-                            relief=tk.FLAT,
-                            bd=1
-                        )
-                    else:
-                        # 未标记的地雷 - 红色炸弹背景
-                        self.buttons[i][j].config(
-                            text='💥',
-                            bg='#c0392b',
-                            fg='#ffffff',
-                            font=("Arial", 12, "bold"),  # 增大字体匹配格子大小
-                            relief=tk.FLAT,
-                            bd=1
-                        )
+            for i, j in mines_by_distance.get(current_distance, []):
+                if self.flagged[i][j]:
+                    # 正确标记的地雷 - 绿色对勾
+                    self.buttons[i][j].config(
+                        text="✓",
+                        bg="#27ae60",
+                        fg="#ffffff",
+                        font=("Arial", 12, "bold"),
+                        relief=tk.FLAT,
+                        bd=1,
+                    )
+                else:
+                    # 未标记的地雷 - 红色炸弹背景
+                    self.buttons[i][j].config(
+                        text="💥",
+                        bg="#c0392b",
+                        fg="#ffffff",
+                        font=("Arial", 12, "bold"),
+                        relief=tk.FLAT,
+                        bd=1,
+                    )
             
             # 强制刷新界面，让动画立即可见
             self.root.update_idletasks()
@@ -898,12 +988,53 @@ class MinesweeperGame:
     def update_timer(self):
         """更新计时器显示"""
         if self.timer_running:
+            if self.root.state() == "iconic" or self.root.focus_get() is None:
+                self.pause_timer()
+                return
             self.elapsed_time = int(time.time() - self.start_time)
             # 限制最大显示999
             if self.elapsed_time > 999:
                 self.elapsed_time = 999
             self.timer_display.config(text=str(self.elapsed_time).zfill(3))
             self.timer_id = self.root.after(1000, self.update_timer)
+
+    def schedule_focus_check(self):
+        if self.start_time is None:
+            return
+        if hasattr(self, "_focus_check_id") and self._focus_check_id:
+            self.root.after_cancel(self._focus_check_id)
+        self._focus_check_id = self.root.after(80, self.apply_focus_state)
+
+    def apply_focus_state(self):
+        self._focus_check_id = None
+        if self.start_time is None:
+            return
+        if self.game_over:
+            return
+        if self.root.state() == "iconic" or self.root.focus_get() is None:
+            self.pause_timer()
+            return
+        self.resume_timer()
+
+    def on_any_focus_out(self, event=None):
+        self.schedule_focus_check()
+
+    def on_any_focus_in(self, event=None):
+        self.schedule_focus_check()
+
+    def on_window_unmap(self, event=None):
+        if event is not None and event.widget != self.root:
+            return
+        if self.start_time is None:
+            return
+        if self.game_over:
+            return
+        self.pause_timer()
+
+    def on_window_map(self, event=None):
+        if event is not None and event.widget != self.root:
+            return
+        self.schedule_focus_check()
 
     def on_window_deactivate(self, event=None):
         if self.start_time is None:
@@ -913,7 +1044,7 @@ class MinesweeperGame:
         self.pause_timer()
     
     def on_window_activate(self, event=None):
-        self.resume_timer()
+        self.schedule_focus_check()
     
     def run(self):
         """启动游戏主循环"""

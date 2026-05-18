@@ -149,10 +149,10 @@ MinesweeperGame         # 主游戏类
 
 欢迎提交 Issue 和 Pull Request！
 
-## 👨‍💻 作者
-
-Your Name - your.email@example.com
-
 ---
 
 享受经典扫雷的乐趣吧！💣🎮
+
+
+## 打包命令
+pyinstaller --noconfirm --clean --windowed --onefile --name Minesweeper minesweeper\main.py
